@@ -223,7 +223,7 @@ run_with(convert, Opts) ->
 
     MagickPrefix = ?MAGICK_PFX(AppEnv),
     OutFile = case is_atom(To) of
-                true -> Workdir ++ "/" ++ Filename ++ "_%06d" ++ "." ++ atom_to_list(To);
+                true -> Workdir ++ "/" ++ uuid:to_string(uuid:uuid4()) ++ "_%06d" ++ "." ++ atom_to_list(To);
                 false -> To
               end,
     PortCommand = string:join([MagickPrefix, "convert",
