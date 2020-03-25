@@ -62,7 +62,7 @@ with(InData, From, Funs, AppEnv) ->
     WorkDir = ?WORKDIR(AppEnv),
     ok = filelib:ensure_dir(WorkDir ++ "/"),
     Filename = uuid:to_string(uuid:uuid4()),
-    InFile = WorkDir ++ "/" ++ Filename ++ "." ++ atom_to_list(From),
+    InFile = filename:join([WorkDir, filename:flatten([Filename, ".", From])]),
     ok = file:write_file(InFile, InData),
     % Res = call_funs(Funs, {InFile, AppEnv}),
     try lists:foldl(fun (Fun, Arg) -> Fun(Arg) end, {InFile, [{filename, Filename}, {from, From} | AppEnv]}, Funs) of
@@ -222,10 +222,12 @@ run_with(convert, Opts) ->
     Workdir = ?WORKDIR(AppEnv),
 
     MagickPrefix = ?MAGICK_PFX(AppEnv),
+    Random = uuid:to_string(uuid:uuid4()),
     OutFile = case is_atom(To) of
-                true -> Workdir ++ "/" ++ uuid:to_string(uuid:uuid4()) ++ "_%06d" ++ "." ++ atom_to_list(To);
+                true -> filename:join([Workdir, Random, lists:flatten([Filename, "_%06d.", To])]);
                 false -> To
               end,
+    ok = filelib:ensure_dir(OutFile),
     PortCommand = string:join([MagickPrefix, "convert",
                                    format_opts(CmdOpts), InFile, OutFile], " "),
 
@@ -242,7 +244,7 @@ run_with(convert, Opts) ->
 
     %% return converted file(s)
     {ok, _} = case is_atom(To) of
-                true -> read_converted_files(Workdir, Filename, To, InFile);
+                true -> read_converted_files(Workdir, filename:join(Random, Filename), To, InFile);
                 false -> {ok, [OutFile]}
               end.
 
@@ -259,8 +261,7 @@ run_with(convert, Opts) ->
 %% @end
 %% -----------------------------------------------------------------------------
 read_converted_files(Workdir, Filename, Suffix, Except) when is_atom(Suffix) ->
-    Files0 = filelib:wildcard(Workdir ++ "/" ++ Filename ++ "*." ++
-                                 atom_to_list(Suffix)),
+    Files0 = filelib:wildcard(filename:join([Workdir, lists:flatten([Filename, "*.", Suffix])])),
     Files = Files0 -- [Except],
   {ok, lists:sort(Files)}.
 
