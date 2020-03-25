@@ -51,10 +51,17 @@
 %% @end
 %% -----------------------------------------------------------------------------
 with(InData, From, Funs) -> with(InData, From, Funs, []).
+with(InData, From, Funs, AppEnv) when is_list(InData) ->
+  Filename = filename:basename(InData),
+  try lists:foldl(fun(Fun, Arg) -> Fun(Arg) end, {InData, [{filename, Filename}, {from, From} | AppEnv]}, Funs) of
+    Res -> Res
+  catch Err -> {error, Err}
+  end
+;
 with(InData, From, Funs, AppEnv) ->
     WorkDir = ?WORKDIR(AppEnv),
     ok = filelib:ensure_dir(WorkDir ++ "/"),
-    Filename = uuid:uuid_to_string(uuid:get_v4()),
+    Filename = uuid:to_string(uuid:uuid4()),
     InFile = WorkDir ++ "/" ++ Filename ++ "." ++ atom_to_list(From),
     ok = file:write_file(InFile, InData),
     % Res = call_funs(Funs, {InFile, AppEnv}),
@@ -192,6 +199,7 @@ run_with(imageinfo, Opts) ->
     MagickPrefix = ?MAGICK_PFX(AppEnv),
 
     PortCommand = string:join([MagickPrefix, "convert", format_opts(CmdOpts), InFile, "info:"], " "),
+    io:format("Command is : ~p", [PortCommand]),
     PortOpts = [stream, use_stdio, exit_status, binary],
     Port = erlang:open_port({spawn, PortCommand}, PortOpts),
 
@@ -215,7 +223,10 @@ run_with(convert, Opts) ->
     Workdir = ?WORKDIR(AppEnv),
 
     MagickPrefix = ?MAGICK_PFX(AppEnv),
-    OutFile = Workdir ++ "/" ++ Filename ++ "_%06d" ++ "." ++ atom_to_list(To),
+    OutFile = case is_atom(To) of
+                true -> Workdir ++ "/" ++ Filename ++ "_%06d" ++ "." ++ atom_to_list(To);
+                false -> To
+              end,
     PortCommand = string:join([MagickPrefix, "convert",
                                    format_opts(CmdOpts), InFile, OutFile], " "),
 
@@ -231,7 +242,11 @@ run_with(convert, Opts) ->
     end,
 
     %% return converted file(s)
-    {ok, _} = read_converted_files(Workdir, Filename, To, InFile).
+    {ok, _} = case is_atom(To) of
+                true -> read_converted_files(Workdir, Filename, To, InFile);
+                false -> {ok, [OutFile]}
+              end.
+
 
 %% -----------------------------------------------------------------------------
 -spec read_converted_files(Workdir, Filename, Suffix, Except) -> {ok, Result}
@@ -244,11 +259,11 @@ run_with(convert, Opts) ->
 %%      Read converted files, delete them, and return file data.
 %% @end
 %% -----------------------------------------------------------------------------
-read_converted_files(Workdir, Filename, Suffix, Except) ->
+read_converted_files(Workdir, Filename, Suffix, Except) when is_atom(Suffix) ->
     Files0 = filelib:wildcard(Workdir ++ "/" ++ Filename ++ "*." ++
                                  atom_to_list(Suffix)),
     Files = Files0 -- [Except],
-    do_read_converted_files(lists:sort(Files), []).
+  {ok, lists:sort(Files)}.
 
 do_read_converted_files([], Acc) ->
     {ok, lists:reverse(Acc)};
@@ -269,10 +284,15 @@ do_read_converted_files([File|Files], Acc) ->
 %% -----------------------------------------------------------------------------
 format_opts(Opts) -> format_opts(Opts, []).
 format_opts([], Res) -> string:join(Res, " ");
+format_opts([{resize, Width, Height}|Opts], Res)  ->
+  format_opts(Opts, Res ++ ["-resize " ++ to_string(Width) ++ "x" ++ to_string(Height)]);
+format_opts([Opt|Opts], Res) when is_atom(Opt) ->
+  format_opts(Opts, Res ++ ["-" ++ atom_to_list(Opt)]);
 format_opts([Opt|Opts], Res) ->
     ArgStr =
         "-" ++ string:join([to_string(Arg) || Arg <- tuple_to_list(Opt)], " "),
     format_opts(Opts, Res ++ [ArgStr]).
+
 
 -spec to_string(term()) -> string().
 to_string(E) when is_atom(E) ->    atom_to_list(E);

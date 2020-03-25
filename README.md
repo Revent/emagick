@@ -13,9 +13,9 @@ accordingly.
 Furthermore `rebar` and `git` are necessary to use the automatic build
 system.
 
-The Erlang package [uuid](https://github.com/okeuday/uuid) is another dependency
+The Erlang package [uuid](https://github.com/avtobiff/erlang-uuid) is another dependency
 
-    https://github.com/okeuday/uuid
+    https://github.com/avtobiff/erlang-uuid
 
 
 ## Installation
